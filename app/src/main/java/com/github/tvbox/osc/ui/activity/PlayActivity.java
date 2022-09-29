@@ -169,7 +169,7 @@ public class PlayActivity extends BaseActivity {
             @Override
             public void playNext(boolean rmProgress) {
                 String preProgressKey = progressKey;
-                PlayActivity.this.playNext();
+                PlayActivity.this.playNext(rmProgress);
                 if (rmProgress && preProgressKey != null)
                     CacheManager.delete(MD5.string2MD5(preProgressKey), 0);
             }
@@ -204,7 +204,11 @@ public class PlayActivity extends BaseActivity {
 
             @Override
             public void selectSubtitle() {
-                selectMySubtitle();
+                try {
+                    selectMySubtitle();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
             }
 
             @Override
@@ -230,10 +234,13 @@ public class PlayActivity extends BaseActivity {
         }
     }
 
-    void selectMySubtitle() {
+    void selectMySubtitle() throws Exception {
         SubtitleDialog subtitleDialog = new SubtitleDialog(PlayActivity.this);
-        if (mController.mSubtitleView.hasInternal) {
+        int playerType = mVodPlayerCfg.getInt("pl");
+        if (mController.mSubtitleView.hasInternal && playerType == 1) {
             subtitleDialog.selectInternal.setVisibility(View.VISIBLE);
+        } else {
+            subtitleDialog.selectInternal.setVisibility(View.GONE);
         }
         subtitleDialog.setSubtitleViewListener(new SubtitleDialog.SubtitleViewListener() {
             @Override
@@ -247,6 +254,10 @@ public class PlayActivity extends BaseActivity {
             @Override
             public void selectInternalSubtitle() {
                 selectMyInternalSubtitle();
+            }
+            @Override
+            public void setTextStyle(int style) {
+                setSubtitleViewTextStyle(style);
             }
         });
         subtitleDialog.setSearchSubtitleListener(new SubtitleDialog.SearchSubtitleListener() {
@@ -297,6 +308,16 @@ public class PlayActivity extends BaseActivity {
         subtitleDialog.show();
     }
 
+    void setSubtitleViewTextStyle(int style) {
+        if (style == 0) {
+            mController.mSubtitleView.setTextColor(getBaseContext().getResources().getColorStateList(R.color.color_FFFFFF));
+            mController.mSubtitleView.setShadowLayer(3, 2, 2, R.color.color_CC000000);
+        } else if (style == 1) {
+            mController.mSubtitleView.setTextColor(getBaseContext().getResources().getColorStateList(R.color.color_FFB6C1));
+            mController.mSubtitleView.setShadowLayer(3, 2, 2, R.color.color_FFFFFF);
+        }
+    }
+
     void selectMyAudioTrack() {
         AbstractPlayer mediaPlayer = mVideoView.getMediaPlayer();
         if (!(mediaPlayer instanceof IjkMediaPlayer)) {
@@ -341,9 +362,10 @@ public class PlayActivity extends BaseActivity {
 
             @Override
             public String getDisplay(TrackInfoBean val) {
-//                return val.index + " : " + val.language;
-                String str = val.name.substring(val.name.substring(0, val.name.indexOf(",")).length()+1).trim();
-                return val.index + " : " + str;
+                String name = val.name.replace("AUDIO,", "");
+                name = name.replace("N/A,", "");
+                name = name.replace(" ", "");
+                return val.index + " : " + val.language + " : " + name;
             }
         }, new DiffUtil.ItemCallback<TrackInfoBean>() {
             @Override
@@ -497,8 +519,8 @@ public class PlayActivity extends BaseActivity {
     }
 
     private void initSubtitleView() {
+        TrackInfo trackInfo = null;
         if (mVideoView.getMediaPlayer() instanceof IjkMediaPlayer) {
-            TrackInfo trackInfo = null;
             trackInfo = ((IjkMediaPlayer)(mVideoView.getMediaPlayer())).getTrackInfo();
             if (trackInfo != null && trackInfo.getSubtitle().size() > 0) {
                 mController.mSubtitleView.hasInternal = true;
@@ -525,6 +547,19 @@ public class PlayActivity extends BaseActivity {
             } else {
                 if (mController.mSubtitleView.hasInternal) {
                     mController.mSubtitleView.isInternal = true;
+                    if (trackInfo != null) {
+                        List<TrackInfoBean> subtitleTrackList = trackInfo.getSubtitle();
+                        int selectedIndex = trackInfo.getSubtitleSelected(true);
+                        for(TrackInfoBean subtitleTrackInfoBean : subtitleTrackList) {
+                            String lowerLang = subtitleTrackInfoBean.language.toLowerCase();
+                            if (lowerLang.startsWith("zh") || lowerLang.startsWith("ch")) {
+                                if (selectedIndex != subtitleTrackInfoBean.index) {
+                                    ((IjkMediaPlayer)(mVideoView.getMediaPlayer())).setTrack(subtitleTrackInfoBean.index);
+                                    break;
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -683,7 +718,7 @@ public class PlayActivity extends BaseActivity {
     private String sourceKey;
     private SourceBean sourceBean;
 
-    private void playNext() {
+    private void playNext(boolean isProgress) {
         boolean hasNext = true;
         if (mVodInfo == null || mVodInfo.seriesMap.get(mVodInfo.playFlag) == null) {
             hasNext = false;
@@ -691,10 +726,15 @@ public class PlayActivity extends BaseActivity {
             hasNext = mVodInfo.playIndex + 1 < mVodInfo.seriesMap.get(mVodInfo.playFlag).size();
         }
         if (!hasNext) {
+            if(mVodInfo!=null && isProgress){
+                mVodInfo.playIndex=0;
+                Toast.makeText(this, "已经是最后一集了!,即将跳到第一集继续播放", Toast.LENGTH_SHORT).show();
+            }
             Toast.makeText(this, "已经是最后一集了!", Toast.LENGTH_SHORT).show();
             return;
+        }else {
+            mVodInfo.playIndex++;
         }
-        mVodInfo.playIndex++;
         play(false);
     }
 
@@ -735,8 +775,8 @@ public class PlayActivity extends BaseActivity {
 
         stopParse();
         if(mVideoView!=null) mVideoView.release();
-        String subtitleCacheKey = mVodInfo.sourceKey + "-" + mVodInfo.id + "-" + mVodInfo.playFlag + "-" + mVodInfo.playIndex + "-subt";
-        String progressKey = mVodInfo.sourceKey + mVodInfo.id + mVodInfo.playFlag + mVodInfo.playIndex;
+        String subtitleCacheKey = mVodInfo.sourceKey + "-" + mVodInfo.id + "-" + mVodInfo.playFlag + "-" + mVodInfo.playIndex+ "-" + vs.name + "-subt";
+        String progressKey = mVodInfo.sourceKey + mVodInfo.id + mVodInfo.playFlag + mVodInfo.playIndex + vs.name;
         //重新播放清除现有进度
         if (reset) {
             CacheManager.delete(MD5.string2MD5(progressKey), 0);
@@ -1181,6 +1221,9 @@ public class PlayActivity extends BaseActivity {
 
     boolean checkVideoFormat(String url) {
         if (sourceBean.getType() == 3) {
+            if (url.contains("=http") || url.contains(".html")) {
+                return false;
+            }
             Spider sp = ApiConfig.get().getCSP(sourceBean);
             if (sp != null && sp.manualVideoCheck())
                 return sp.isVideoFormat(url);
@@ -1312,9 +1355,9 @@ public class PlayActivity extends BaseActivity {
         }
 
         WebResourceResponse checkIsVideo(String url, HashMap<String, String> headers) {
-//            if (url.endsWith("/favicon.ico")) {
-//                return new WebResourceResponse("image/png", null, null);
-//            }
+            if (url.endsWith("/favicon.ico")) {
+                return null;
+            }
             LOG.i("shouldInterceptRequest url:" + url);
             boolean ad;
             if (!loadedUrls.containsKey(url)) {
@@ -1333,6 +1376,7 @@ public class PlayActivity extends BaseActivity {
                     } else {
                         playUrl(url, null);
                     }
+                    mController.setUrlTitle("视频地址："+url);
                     stopLoadWebView(false);
                 }
             }
@@ -1485,9 +1529,9 @@ public class PlayActivity extends BaseActivity {
         public XWalkWebResourceResponse shouldInterceptLoadRequest(XWalkView view, XWalkWebResourceRequest request) {
             String url = request.getUrl().toString();
             // suppress favicon requests as we don't display them anywhere
-//            if (url.endsWith("/favicon.ico")) {
-//                return createXWalkWebResourceResponse("image/png", null, null);
-//            }
+            if (url.endsWith("/favicon.ico")) {
+                return null;
+            }
             LOG.i("shouldInterceptLoadRequest url:" + url);
             boolean ad;
             if (!loadedUrls.containsKey(url)) {
@@ -1518,6 +1562,7 @@ public class PlayActivity extends BaseActivity {
                     } else {
                         playUrl(url, null);
                     }
+                    mController.setUrlTitle("视频地址："+url);
                     stopLoadWebView(false);
                 }
             }
