@@ -340,10 +340,8 @@ public class PlayActivity extends BaseActivity {
     void setSubtitleViewTextStyle(int style) {
         if (style == 0) {
             mController.mSubtitleView.setTextColor(getBaseContext().getResources().getColorStateList(R.color.color_FFFFFF));
-            mController.mSubtitleView.setShadowLayer(3, 2, 2, R.color.color_CC000000);
         } else if (style == 1) {
             mController.mSubtitleView.setTextColor(getBaseContext().getResources().getColorStateList(R.color.color_FFB6C1));
-            mController.mSubtitleView.setShadowLayer(3, 2, 2, R.color.color_FFFFFF);
         }
     }
 
@@ -1439,6 +1437,13 @@ public class PlayActivity extends BaseActivity {
                 }
                 return null;
             }
+
+            boolean isFilter = VideoParseRuler.isFilter(webUrl, url);
+            if (isFilter) {
+                LOG.i( "shouldInterceptLoadRequest filter:" + url);
+                return null;
+            }
+
             boolean ad;
             if (!loadedUrls.containsKey(url)) {
                 ad = AdBlocker.isAd(url);
@@ -1610,6 +1615,13 @@ public class PlayActivity extends BaseActivity {
                 }
                 return null;
             }
+
+            boolean isFilter = VideoParseRuler.isFilter(webUrl, url);
+            if (isFilter) {
+                LOG.i( "shouldInterceptLoadRequest filter:" + url);
+                return null;
+            }
+
             boolean ad;
             if (!loadedUrls.containsKey(url)) {
                 ad = AdBlocker.isAd(url);
